@@ -32,6 +32,7 @@ bool loadPrayers() {
   // build “YYYY-MM-DD”
   DateTime now;
   now = rtc.now();
+  rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
   char today[11];
   sprintf(today, "%04d-%02d-%02d", now.year(), now.month(), now.day());
 
@@ -65,7 +66,17 @@ void setup() {
   // — init Serial, RTC, I2C bus
   Serial.begin(9600);
   Wire.begin();
-  rtc.begin();
+  //rtc.begin();
+
+  if (! rtc.begin()) {
+    Serial.println("Couldn't find RTC");
+    while (1);
+  }
+  // only set once—when the chip lost power or was never set
+  if (rtc.lostPower()) {
+    Serial.println("RTC lost power – setting to compile time");
+    rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
+  }
 
   // — show splash on LCD
   lcd.init();
@@ -101,7 +112,9 @@ void loop() {
 
   // — top line: hh:mm:ss
   char timeBuf[9];
-  sprintf(timeBuf, "%02d:%02d:%02d", now.hour(), now.minute(), now.second());
+  int delayed_min = now.minute();
+  // delayed_min = delayed_min + 3; // optional delay. Add this line if you don't plan to use a CR2032 battery in the RTC.
+  sprintf(timeBuf, "%02d:%02d:%02d", now.hour(), now.minute(), now.second()); // replace "now.minute()" with "delayed_min" if your not using the CR2032 in your RTC.
   lcd.setCursor(0, 0);
   lcd.print(timeBuf);
 
