@@ -1,0 +1,149 @@
+#include <Wire.h>                // Helps Arduino talk to other devices
+#include <RTClib.h>              // real-time clock (RTC)
+#include <LiquidCrystal_I2C.h>   // LCD Screen
+#include <SD.h>                  // SD Card Reader
+#include <TMRpcm.h>              // Sound Player
+
+#define PRAYER_COUNT ______          // ADD HERE: How many Daily prayers are there?
+#define SD_CS_PIN    10
+#define AZAN_FILE    "____"          // ADD HERE: Name of the sounds file (hint: Azan.wav)
+#define PRAYER_FILE  "____"          // ADD HERE: Name of the file with prayer times (hint: prayer.txt)
+
+// ——— hardware objects —————————————————————————————————————————————
+RTC_DS3231        rtc;               // The clock
+LiquidCrystal_I2C lcd(0x27, 16, 2);  // The screen
+TMRpcm            audio;             // The speaker
+
+// ——— prayer data —————————————————————————————————————————————————————
+const char* prayers[PRAYER_COUNT] = { "___", "___", "___", "___", "___" };    // ADD HERE: Name the 5 daily prayers
+int         prayerHour[PRAYER_COUNT];
+int         prayerMin [PRAYER_COUNT];
+
+// ——— run-time state ——————————————————————————————————————————————————
+bool          inPrayer    = false;
+unsigned long prayerEnd   = 0;
+const char*   currentName = ____;        // ADD HERE: Leave this empty for now (hint: use "nullptr")
+
+// ——— helper to load today’s 5 times from “prayer.txt” ————————————————————
+bool loadPrayers() {
+  File f = SD.open(____);        // ADD HERE: The file with prayer times
+  if (!f) return false;
+
+  // build “YYYY-MM-DD”
+  DateTime now;
+  now = rtc.___();        // ADD HERE: Hint: should it be done now or later?
+  rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
+  char today[11];
+  sprintf(today, "%04d-%02d-%02d", now.year(), now.month(), now.day());
+
+  // scan file line-by-line
+  while (f.available()) {
+    String line = f.readStringUntil('\n');
+    line.trim();
+    if (!line.startsWith(today)) continue;
+
+    // parse the 5 comma-separated times
+    int idx = strlen(today) + 1;  
+    for (int i = 0; i < PRAYER_COUNT; i++) {
+      int comma = line.indexOf(',', idx);
+      if (comma < 0) comma = line.length();
+      String t = line.substring(idx, comma);
+      t.trim();
+      int colon = t.indexOf(':');
+      prayerHour[i] = t.substring(0, colon).toInt();
+      prayerMin [i] = t.substring(colon + 1).toInt();
+      idx = comma + 1;
+    }
+    f.close();
+    return true;
+  }
+
+  f.close();
+  return false;
+}
+
+void setup() {
+  // — init Serial, RTC, I2C bus
+  Serial.begin(9600);
+  Wire.begin();
+  //rtc.begin();
+
+  if (! rtc.begin()) {
+    Serial.println("Couldn't find RTC");
+    while (1);
+  }
+  // only set once—when the chip lost power or was never set
+  if (rtc.____) {        // ADD HERE: what scenerio does this line account for?
+    Serial.println("RTC lost power – setting to compile time");
+    rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
+  }
+
+  // — show splash on LCD
+  lcd.init();
+  lcd._____;      //ADD HERE: turn on the LCD backlight
+  lcd.clear();
+  lcd.print("Loading Times");
+  delay(1000);
+
+  // — init SD card
+  if (!SD.begin(SD_CS_PIN)) {
+    lcd.clear();
+    lcd.print("SD init failed");
+    while (true);  // stop here
+  }
+
+  // — load today’s prayer times (5 entries)
+  if (!loadPrayers()) {
+    lcd.clear();
+    lcd.print("No Times Found");
+    while (true);
+  }
+
+  // — configure audio output
+  audio.speakerPin = 9;
+  audio.setVolume(5);
+
+  lcd.clear();
+}
+
+void loop() {
+  // — read clock
+  DateTime now = rtc.now();
+
+  // — top line: hh:mm:ss
+  char timeBuf[9];
+  int delayed_min = now.minute();
+  // delayed_min = delayed_min + 3; // optional delay. Add this line if you don't plan to use a CR2032 battery in the RTC.
+  sprintf(timeBuf, "%02d:%02d:%02d", now.hour(), now.minute(), now.second()); // replace "now.minute()" with "delayed_min" if your not using the CR2032 in your RTC.
+  lcd.setCursor(0, 0);
+  lcd.print(_________);  // ADD HERE: use the time variable we just made
+
+  // — check once if this minute matches a prayer
+  if (!inPrayer) {
+    for (int i = 0; i < PRAYER_COUNT; i++) {
+      if (now.hour() == prayerHour[i]
+       && now.minute() == prayerMin [i]) {
+        inPrayer    = true;
+        prayerEnd   = millis() + 5UL*60UL*1000UL;  // 5 minutes
+        currentName = prayers[i];
+        Serial.print("Time for "); Serial.println(currentName);
+        if (SD.exists(AZAN_FILE)) audio.play(_________);  // ADD HERE: use the Athan filename constant
+        break;
+      }
+    }
+  }
+
+  // — bottom line: either “Time for X” or date
+  lcd.setCursor(0, 1);
+  if (inPrayer && millis() < prayerEnd) {
+    lcd.print("Time for ");
+    lcd.print(currentName);
+  } else {
+    inPrayer = false;
+    char dateBuf[11];
+    sprintf(dateBuf, "%04d-%02d-%02d", now.year(), now.month(), now.day());
+    lcd.print(____);      // ADD HERE: use the date variable we just made
+  }
+
+  delay(250);
+}
