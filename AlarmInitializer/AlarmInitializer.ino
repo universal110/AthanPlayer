@@ -1,5 +1,5 @@
 #include <Wire.h>
-#include <RTClib.h>
+#include <DS3231.h>
 #include <LiquidCrystal_I2C.h>
 #include <SD.h>
 #include <TMRpcm.h>
@@ -10,9 +10,10 @@
 #define PRAYER_FILE  "prayer.txt"
 
 // ——— hardware objects —————————————————————————————————————————————
-RTC_DS3231        rtc;
+DS3231          rtc(SDA, SCL);
 LiquidCrystal_I2C lcd(0x27, 16, 2);
-TMRpcm            audio;
+TMRpcm          audio;
+Time            now;  // from DS3231 library
 
 // ——— prayer data —————————————————————————————————————————————————————
 const char* prayers[PRAYER_COUNT] = { "Fajr", "Dhuhr", "Asr", "Maghrib", "Isha" };
@@ -30,11 +31,15 @@ bool loadPrayers() {
   if (!f) return false;
 
   // build “YYYY-MM-DD”
+<<<<<<< HEAD:AlarmInitializer.ino
   DateTime now;
   now = rtc.now();
   rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
+=======
+  now = rtc.getTime();
+>>>>>>> 2ae2513 (Updated AlarmInitializer to use DS3231.h Library instead of RTClib.h):AlarmInitializer/AlarmInitializer.ino
   char today[11];
-  sprintf(today, "%04d-%02d-%02d", now.year(), now.month(), now.day());
+  sprintf(today, "%04d-%02d-%02d", now.year, now.mon, now.date);
 
   // scan file line-by-line
   while (f.available()) {
@@ -43,7 +48,7 @@ bool loadPrayers() {
     if (!line.startsWith(today)) continue;
 
     // parse the 5 comma-separated times
-    int idx = strlen(today) + 1;  
+    int idx = strlen(today) + 1;
     for (int i = 0; i < PRAYER_COUNT; i++) {
       int comma = line.indexOf(',', idx);
       if (comma < 0) comma = line.length();
@@ -63,7 +68,6 @@ bool loadPrayers() {
 }
 
 void setup() {
-  // — init Serial, RTC, I2C bus
   Serial.begin(9600);
   Wire.begin();
   //rtc.begin();
@@ -89,7 +93,7 @@ void setup() {
   if (!SD.begin(SD_CS_PIN)) {
     lcd.clear();
     lcd.print("SD init failed");
-    while (true);  // stop here
+    while (true);
   }
 
   // — load today’s prayer times (5 entries)
@@ -107,24 +111,26 @@ void setup() {
 }
 
 void loop() {
-  // — read clock
-  DateTime now = rtc.now();
+  now = rtc.getTime();
 
   // — top line: hh:mm:ss
   char timeBuf[9];
+<<<<<<< HEAD:AlarmInitializer.ino
   int delayed_min = now.minute();
   // delayed_min = delayed_min + 3; // optional delay. Add this line if you don't plan to use a CR2032 battery in the RTC.
   sprintf(timeBuf, "%02d:%02d:%02d", now.hour(), now.minute(), now.second()); // replace "now.minute()" with "delayed_min" if your not using the CR2032 in your RTC.
+=======
+  sprintf(timeBuf, "%02d:%02d:%02d", now.hour, now.min, now.sec);
+>>>>>>> 2ae2513 (Updated AlarmInitializer to use DS3231.h Library instead of RTClib.h):AlarmInitializer/AlarmInitializer.ino
   lcd.setCursor(0, 0);
   lcd.print(timeBuf);
 
   // — check once if this minute matches a prayer
   if (!inPrayer) {
     for (int i = 0; i < PRAYER_COUNT; i++) {
-      if (now.hour() == prayerHour[i]
-       && now.minute() == prayerMin [i]) {
+      if (now.hour == prayerHour[i] && now.min == prayerMin[i]) {
         inPrayer    = true;
-        prayerEnd   = millis() + 5UL*60UL*1000UL;  // 5 minutes
+        prayerEnd   = millis() + 5UL * 60UL * 1000UL;  // 5 minutes
         currentName = prayers[i];
         Serial.print("Time for "); Serial.println(currentName);
         if (SD.exists(AZAN_FILE)) audio.play(AZAN_FILE);
@@ -141,7 +147,7 @@ void loop() {
   } else {
     inPrayer = false;
     char dateBuf[11];
-    sprintf(dateBuf, "%04d-%02d-%02d", now.year(), now.month(), now.day());
+    sprintf(dateBuf, "%04d-%02d-%02d", now.year, now.mon, now.date);
     lcd.print(dateBuf);
   }
 
