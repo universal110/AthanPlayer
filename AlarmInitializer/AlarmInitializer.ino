@@ -162,5 +162,5 @@ void loop() {
     lcd.print(dateBuf);
   }
 
-  delay(100);
+  delay(900); // smoother delay, ensure it's not over 1000 (1000 ms = 1s)
 }
