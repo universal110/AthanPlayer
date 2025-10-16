@@ -10,15 +10,19 @@
 #define PRAYER_FILE  "prayer.txt"
 
 // ——— hardware objects —————————————————————————————————————————————
-DS3231          rtc(SDA, SCL);
+DS3231 myRTC;
 LiquidCrystal_I2C lcd(0x27, 16, 2);
-TMRpcm          audio;
-Time            now;  // from DS3231 library
+TMRpcm audio;
+
+// ——— flags for 12/24h mode ————————————————————
+bool century = false;
+bool h12Flag;
+bool pmFlag;
 
 // ——— prayer data —————————————————————————————————————————————————————
 const char* prayers[PRAYER_COUNT] = { "Fajr", "Dhuhr", "Asr", "Maghrib", "Isha" };
-int         prayerHour[PRAYER_COUNT];
-int         prayerMin [PRAYER_COUNT];
+int prayerHour[PRAYER_COUNT];
+int prayerMin [PRAYER_COUNT];
 
 // ——— run-time state ——————————————————————————————————————————————————
 bool          inPrayer    = false;
@@ -27,19 +31,17 @@ const char*   currentName = nullptr;
 
 // ——— helper to load today’s 5 times from “prayer.txt” ————————————————————
 bool loadPrayers() {
+  // read time from RTC
+  int year   = myRTC.getYear();
+  int month  = myRTC.getMonth(century);
+  int date   = myRTC.getDate();
+
   File f = SD.open(PRAYER_FILE);
   if (!f) return false;
 
   // build “YYYY-MM-DD”
-<<<<<<< HEAD:AlarmInitializer.ino
-  DateTime now;
-  now = rtc.now();
-  rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
-=======
-  now = rtc.getTime();
->>>>>>> 2ae2513 (Updated AlarmInitializer to use DS3231.h Library instead of RTClib.h):AlarmInitializer/AlarmInitializer.ino
   char today[11];
-  sprintf(today, "%04d-%02d-%02d", now.year, now.mon, now.date);
+  sprintf(today, "20%02d-%02d-%02d", year, month, date);
 
   // scan file line-by-line
   while (f.available()) {
@@ -70,40 +72,40 @@ bool loadPrayers() {
 void setup() {
   Serial.begin(9600);
   Wire.begin();
-  //rtc.begin();
 
-  if (! rtc.begin()) {
-    Serial.println("Couldn't find RTC");
-    while (1);
-  }
-  // only set once—when the chip lost power or was never set
-  if (rtc.lostPower()) {
-    Serial.println("RTC lost power – setting to compile time");
-    rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
-  }
+  // ——— manually set time/date ————————————————
+  // Uncomment these lines ONCE to set time, then reupload with them commented
+  // myRTC.setClockMode(false); // false = 24h format
+  // myRTC.setYear(25);         // last two digits → 2025
+  // myRTC.setMonth(10);        // October
+  // myRTC.setDate(15);         // 15th
+  // myRTC.setHour(22);         // 22 = 10:00 PM
+  // myRTC.setMinute(0);        // 00 minutes
+  // myRTC.setSecond(0);        // 00 seconds
+  // ——————————————————————————————————————————————
 
-  // — show splash on LCD
+  // — LCD setup
   lcd.init();
   lcd.backlight();
   lcd.clear();
   lcd.print("Loading Times");
-  delay(1000);
+  delay(500);
 
-  // — init SD card
+  // — SD card
   if (!SD.begin(SD_CS_PIN)) {
     lcd.clear();
     lcd.print("SD init failed");
     while (true);
   }
 
-  // — load today’s prayer times (5 entries)
+  // — load today’s prayer times
   if (!loadPrayers()) {
     lcd.clear();
     lcd.print("No Times Found");
     while (true);
   }
 
-  // — configure audio output
+  // — audio
   audio.speakerPin = 9;
   audio.setVolume(5);
 
@@ -111,24 +113,30 @@ void setup() {
 }
 
 void loop() {
-  now = rtc.getTime();
+  // read current time from DS3231
+  int year   = myRTC.getYear();
+  int month  = myRTC.getMonth(century);
+  int date   = myRTC.getDate();
+  int hour   = myRTC.getHour(h12Flag, pmFlag);
+  int minute = myRTC.getMinute();
+  int second = myRTC.getSecond();
 
-  // — top line: hh:mm:ss
-  char timeBuf[9];
-<<<<<<< HEAD:AlarmInitializer.ino
-  int delayed_min = now.minute();
-  // delayed_min = delayed_min + 3; // optional delay. Add this line if you don't plan to use a CR2032 battery in the RTC.
-  sprintf(timeBuf, "%02d:%02d:%02d", now.hour(), now.minute(), now.second()); // replace "now.minute()" with "delayed_min" if your not using the CR2032 in your RTC.
-=======
-  sprintf(timeBuf, "%02d:%02d:%02d", now.hour, now.min, now.sec);
->>>>>>> 2ae2513 (Updated AlarmInitializer to use DS3231.h Library instead of RTClib.h):AlarmInitializer/AlarmInitializer.ino
+  // — top line: current time
   lcd.setCursor(0, 0);
-  lcd.print(timeBuf);
+  if (hour < 10) lcd.print('0');
+  lcd.print(hour);
+  lcd.print(':');
+  if (minute < 10) lcd.print('0');
+  lcd.print(minute);
+  lcd.print(':');
+  if (second < 10) lcd.print('0');
+  lcd.print(second);
+  lcd.print("   "); // clear remainder of line
 
-  // — check once if this minute matches a prayer
+  // — check if it's prayer time
   if (!inPrayer) {
     for (int i = 0; i < PRAYER_COUNT; i++) {
-      if (now.hour == prayerHour[i] && now.min == prayerMin[i]) {
+      if (hour == prayerHour[i] && minute == prayerMin[i]) {
         inPrayer    = true;
         prayerEnd   = millis() + 5UL * 60UL * 1000UL;  // 5 minutes
         currentName = prayers[i];
@@ -139,17 +147,20 @@ void loop() {
     }
   }
 
-  // — bottom line: either “Time for X” or date
+  // — bottom line: date or prayer name
   lcd.setCursor(0, 1);
+  lcd.print("                "); // clear line
+  lcd.setCursor(0, 1);
+
   if (inPrayer && millis() < prayerEnd) {
     lcd.print("Time for ");
     lcd.print(currentName);
   } else {
     inPrayer = false;
     char dateBuf[11];
-    sprintf(dateBuf, "%04d-%02d-%02d", now.year, now.mon, now.date);
+    sprintf(dateBuf, "%02d/%02d/20%02d", month, date, year);
     lcd.print(dateBuf);
   }
 
-  delay(250);
+  delay(100);
 }
