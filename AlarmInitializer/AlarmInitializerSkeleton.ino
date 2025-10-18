@@ -21,7 +21,7 @@ bool h12Flag;
 bool pmFlag;
 
 // ——— prayer data —————————————————————————————————————————————————————
-const char* prayers[PRAYER_COUNT] = { "Fajr", "Dhuhr", "Asr", "Maghrib", "Isha" };
+const char* prayers[PRAYER_COUNT] = {};
 int prayerHour[PRAYER_COUNT];
 int prayerMin [PRAYER_COUNT];
 
@@ -77,10 +77,10 @@ void setup() {
   // ——— manually set time/date ————————————————
   // Uncomment these lines ONCE to set time, then reupload with them commented
   // myRTC.setClockMode(false); // false = 24h format
-  // myRTC.setYear(25);         // last two digits → 2025
-  // myRTC.setMonth(10);        // October
-  // myRTC.setDate(15);         // 15th
-  // myRTC.setHour(22);         // 22 = 10:00 PM
+  // myRTC.setYear(25);         // last two digits → 20__
+  // myRTC.setMonth(10);        // Insert Month
+  // myRTC.setDate(15);         // Insert Day
+  // myRTC.setHour(22);         // Insert Hour (eg.: 22 = 10:00 PM)
   // myRTC.setMinute(0);        // 00 minutes
   // myRTC.setSecond(0);        // 00 seconds
   // ——————————————————————————————————————————————
